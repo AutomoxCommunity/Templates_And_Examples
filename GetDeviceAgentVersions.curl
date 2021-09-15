@@ -1,0 +1,4 @@
+curl -s -X GET \
+  'https://console.automox.com/api/servers?o={ORG_ID}&page=0&limit=500' \
+  -H 'Authorization: Bearer YOUR_API_KEY' | \
+    python3 -c 'import json,sys; json_object=json.load(sys.stdin); print([[row["name"], row["agent_version"]] for row in json_object])'
