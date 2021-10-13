@@ -67,7 +67,7 @@ $body = @"
       "refresh_interval": 1440,
       "parent_server_group_id": "$parentid",
       "ui_color": "#3C18EF",
-      "notes": "Deans_Moch_Company_Child_$ChildFolder",
+      "notes": "$Primary_Child_$ChildFolder",
       "enable_os_auto_update": false,
       "enable_wsus": false
   }
