@@ -115,7 +115,7 @@ foreach ($server in $servers) {
     $headers = @{ "Authorization" = "Bearer $apiKey" }
     $response = (Invoke-WebRequest -Method Get -Uri $getURI -Headers $headers).Content | ConvertFrom-Json
 
-    $response | Where-Object {$_.installed -EQ $true} | Select-Object @{label=”Computer”; Expression= {"$serverName"}},Display_Name,Version `
+    $response | Where-Object {$_.installed -EQ $true} | Select-Object @{label="Computer"; Expression= {"$serverName"}},Display_Name,Version `
               | Sort-Object Display_Name | Export-Csv -Path $filepath -NoTypeInformation -Append -Force
 
 }
