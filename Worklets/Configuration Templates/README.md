@@ -1,0 +1,1 @@
+This is a public repository of Worklet configuration templates. These can be used for defining a device's desired state configuration and enforcing security baselines through an Automox Worklet.
