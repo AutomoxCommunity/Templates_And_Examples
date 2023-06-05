@@ -1,0 +1,16 @@
+{
+    "TargetState": "ON",
+    "Rules": [
+      [
+        "Block",
+        "TCP",
+        80
+      ],
+      [
+        "Block",
+        "TCP",
+        443
+      ]
+    ],
+    "TargetProfile": "Any"
+}
