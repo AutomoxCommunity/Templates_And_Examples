@@ -8,12 +8,10 @@ $limit = 500
 $headers = @{"Authorization" = "Bearer $apiKey"}
 #############################################################################################################
 
-
 #HealthReport
 
-$expDir = 'C:\Temp\health.csv'
+$expDir = 'C:\Temp'
 $servers = @()
-
 
 while($true) {
 
@@ -53,15 +51,13 @@ while($true) {
 
 }        
 
-$servers | Export-Csv -Path $expDir -NoTypeInformation -Force
-
-
+$servers | Export-Csv -Path "$expDir\health.csv" -NoTypeInformation -Force
 
 #####################################
 #Get packages
 ##Reset Variables
 $page = 0
-$filepath = "C:\Temp\packages.csv"
+$filepath = "$expDir\packages.csv"
 
 while($true) {
    
@@ -82,7 +78,7 @@ $data | Group-Object display_name | Sort-Object name | Select-Object Count,name 
 
 #Get SoftwareInv
 $page = 0
-$filepath = 'C:\Temp\SoftwareInv.csv'
+$filepath = "$expDir\SoftwareInv.csv"
 Set-Content $filepath -Value "Computer,display_name,version"
 
 $apiInstance = 'https://console.automox.com/api/'
@@ -137,8 +133,7 @@ while($true) {
 }
 
 Write-Host "Creating Servers json..."
-$data | Out-File C:\Temp\Servers.json
-
+$data | Out-File "$expDir\Servers.json"
 
 ##ServerGroups
 Start-Sleep -Seconds 5
@@ -158,10 +153,7 @@ while($true) {
 }
 
 Write-Host "Creating Servergroups json..."
-
-$data | Out-File C:\Temp\ServerGroups.json
-
-
+$data | Out-File "$expDir\ServerGroups.json"
 
 ##Prepatch Report
 Start-Sleep -Seconds 5
@@ -181,9 +173,7 @@ while($true) {
 }
 
 Write-Host "Creating PrePatch json..."
-
-$data | Out-File C:\Temp\PrePatch.json
-
+$data | Out-File "$expDir\PrePatch.json"
 
 ##PolicyStats
 Start-Sleep -Seconds 5
@@ -203,10 +193,7 @@ while($true) {
 }
 
 Write-Host "Creating PolicyStats json..."
-
-$data | Out-File C:\Temp\PolicyStats.json
-
-
+$data | Out-File "$expDir\PolicyStats.json"
 
 ##PackagesWaiting
 Start-Sleep -Seconds 5
@@ -226,11 +213,7 @@ while($true) {
 }
 
 Write-Host "Creating PackagesWaiting json..."
-
-$data | Out-File C:\Temp\PackagesWaiting.json
-
-
-
+$data | Out-File "$expDir\PackagesWaiting.json"
 
 ##Policies
 Start-Sleep -Seconds 5
@@ -250,8 +233,4 @@ while($true) {
 }
 
 Write-Host "Creating Policys json..."
-
-$data | Out-File C:\Temp\Policies.json
-
-
-
+$data | Out-File "$expDir\Policies.json"
