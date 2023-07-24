@@ -1,30 +1,102 @@
-﻿# Update these variables with your API Key, orgID & save directory/filename 
+# Update these variables with your API Key, orgID & save directory/filename
 # This script expects the C:\temp\ path to already exist and will overwrite an existing file
 
 $apiKey = '<YOUR_KEY_HERE>'
 $orgID = '<YOUR_ORG_HERE>'
 $page = 0
 $limit = 500
+$expDir = 'C:\Temp\'
+################################################
+
+################################################
+# Do not edit below this line
+################################################
 $headers = @{"Authorization" = "Bearer $apiKey"}
-#############################################################################################################
+$baseUrl = "https://console.automox.com/api"
+$healthFile = Join-Path "$expDir" "health.csv"
+$packagesFile = Join-Path "$expDir" "packages.csv"
+$softwareInvFile = Join-Path "$expDir" "SoftwareInv.csv"
+$serverFile = Join-Path "$expDir" "servers.json"
+$serverGroupsFile = Join-Path "$expDir" "ServerGroups.json"
+$prePatchFile = Join-Path "$expDir" "PrePatch.json"
+$policyStatsFile = Join-Path "$expDir" "PolicyStats.json"
+$packagesWaitingFile = Join-Path "$expDir" "PackagesWaiting.json"
+$policiesFile = Join-Path "$expDir" "Policies.json"
+################################################
 
-#HealthReport
+function Request {
+    param(
+        [Parameter( Mandatory = $true)] [ String ] $Method,
+        [Parameter( Mandatory = $true)] [ String ] $Uri,
+        [Parameter( Mandatory = $true)] [ PSCustomObject ] $Params
+    )
 
-$expDir = 'C:\Temp'
+    $resp = (Invoke-WebRequest -Method $Method -Uri $Uri -Headers $headers -Body $Params -UseBasicParsing)
+    
+    return $resp
+}
+
+function Paginate {
+    param(
+        [Parameter( Mandatory = $true)] [ String ] $Method,
+        [Parameter( Mandatory = $true)] [ String ] $Path,
+        [Parameter( Mandatory = $true)] [ PSCustomObject ] $Params
+    )
+
+    $output = @()
+
+    $Uri = $baseUrl + $Path
+
+    while($true) {
+        $resp = Request $Method $Uri $Params
+        if ( $resp.StatusCode -eq 200) {
+            $output += $resp
+        } else {
+            Write-Error "Web request failed, exiting"
+            Exit 1
+        }
+
+        if ((ConvertFrom-Json -InputObject $resp.Content).psobject.Properties.name -match "results") {
+            if ((ConvertFrom-Json -InputObject $resp.Content).results.length -lt $limit) {
+                break
+            }
+        } else {
+            if ((ConvertFrom-Json -InputObject $resp.Content).length -lt $limit) {
+                break
+            }
+        }
+
+        if ($Params.psobject.Properties.name -match "p") {
+            $Params.p += 1
+        } elseif ($Params.psobject.Properties.name -match "offset") {
+            $Params.offset += $Params.l
+        } else {
+            break
+        }
+
+    }
+    return $output
+}
+
+################################################
+# Generate the Health Report
+################################################
 $servers = @()
+$serversHealth = @()
 
-while($true) {
+$Params = @{
+    o = $orgId
+    l = $limit
+    p = $page
+}
 
-    $uri = "https://console.automox.com/api/servers?o=$orgID&api_key=$apiKey&l=$limit&p=$page"
-
-    $resp = (Invoke-WebRequest -Method GET -Uri $uri -UseBasicParsing).Content | ConvertFrom-Json | Select-Object results
-
-    $OutputVol = $resp.results `
+$output = Paginate "GET" "/servers" $Params
+foreach ($resp in $output) {
+    $results = $resp.Content | ConvertFrom-Json | Select-Object results
+    $OutputVol = $results.results `
         | Select-Object Name, agent_version, needs_reboot, last_disconnect_time, last_refresh_time, pending_patches, patches, `
             last_update_time, os_family, os_name, os_version, id, server_group_id, create_time -ExpandProperty detail `
         | Where-Object VOLUME -NE $null
-
-    $resp = (Invoke-WebRequest -Method GET -Uri $uri -UseBasicParsing).Content | ConvertFrom-Json | Select-Object results
 
     $OutputNoVol = $resp.results `
         | Select-Object Name, agent_version, needs_reboot, last_disconnect_time, last_refresh_time, pending_patches, patches, `
@@ -37,200 +109,143 @@ while($true) {
         | Select-Object Name, agent_version, PS_VERSION, AUTO_UPDATE_OPTIONS, WSUS_CONFIG, UPDATE_SOURCE_CHECK, WMI_INTEGRITY_CHECK, needs_reboot, `
             last_disconnect_time, last_refresh_time, pending_patches, patches, last_update_time, os_family, os_name, os_version, id, server_group_id, create_time, IS_SYSTEM_DISK `
             ,@{
-                Name = 'Free (GB)'
-                Expression = { ($_.FREE/1000000000).ToString("#####.#") }
-            } | Where-Object IS_SYSTEM_DISK -EQ True | Sort-Object Name 
+        Name = 'Free (GB)'
+        Expression = { ($_.FREE/1000000000).ToString("#####.#") }
+    } | Where-Object IS_SYSTEM_DISK -EQ True | Sort-Object Name
 
-    $servers += $Output
-    $servers += $OutputNoVol
-    $page += 1
-
-    if($resp.results.Count -lt $limit) {
-        break
-    }
-
-}        
-
-$servers | Export-Csv -Path "$expDir\health.csv" -NoTypeInformation -Force
-
-#####################################
-#Get packages
-##Reset Variables
-$page = 0
-$filepath = "$expDir\packages.csv"
-
-while($true) {
-   
-    $urlPackages = "https://console.automox.com/api/orgs/$orgID/packages?o=$orgID&l=$limit&p=$page"
-    $response = (Invoke-WebRequest -Method Get -Uri $urlPackages -Headers $headers).Content | ConvertFrom-Json
-   
-    Write-Output $page
-    $data += $response
-    $page += 1
-
-    if($response.count -lt $limit) {
-        break
-    }
-}
-$data | Group-Object display_name | Sort-Object name | Select-Object Count,name `
-      | Export-Csv -Path $filepath -NoTypeInformation
-
-
-#Get SoftwareInv
-$page = 0
-$filepath = "$expDir\SoftwareInv.csv"
-Set-Content $filepath -Value "Computer,display_name,version"
-
-$apiInstance = 'https://console.automox.com/api/'
-$apiTable = 'servers'
-$orgAndKey = "?o=$orgID&api_key=$apiKey"
-
-# Put components together
-$getURI = $apiInstance + $apiTable + $orgAndKey
-
-# Get the json body of the Web Request
-$jsonReturn = (Invoke-WebRequest -UseBasicParsing -Method Get -Uri $getURI).Content
-
-# Convert to object with manipulatable properties/values
-$servers = $jsonReturn | ConvertFrom-Json
-$servers = $servers | Sort-Object name
-
-# Check each server for software
-foreach ($server in $servers) {
-
-    $serverID = $server.id
-    $serverName = $server.name
-    
-    Write-Output $serverName
-    
-    $orgAndKey = "/$serverID/packages?o=$orgID"
-
-    # Put components together
-    $getURI = $apiInstance + $apiTable + $orgAndKey
-
-    $headers = @{ "Authorization" = "Bearer $apiKey" }
-    $response = (Invoke-WebRequest -Method Get -Uri $getURI -Headers $headers).Content | ConvertFrom-Json
-
-    $response | Where-Object {$_.installed -EQ $true} | Select-Object @{label="Computer"; Expression= {"$serverName"}},Display_Name,Version `
-              | Sort-Object Display_Name | Export-Csv -Path $filepath -NoTypeInformation -Append -Force
-
+    $servers += $results
+    $serversHealth += $Output
+    $serversHealth += $OutputNoVol
 }
 
-##Servers.Endpoints
-##Reset Variables
-$page = 0
-$data = @()
+$serversHealth | Export-Csv -Path $healthFile -NoTypeInformation -Force
+write-host "Generated Health Report CSV"
 
-while($true) {
-    $url = "https://console.automox.com/api/servers?o=$orgID&limit=$limit&page=$page"
-    $resp = (Invoke-WebRequest -Method Get -Uri $url -Headers $headers).Content 
-    $data += $resp
+################################################
+# Generate Packages Output
+################################################
+$packages = @()
 
-    if($resp.results.count -lt $limit) {
-        break
-    }
-    $page += 1
+$Params = @{
+    o = $orgId
+    l = $limit
+    p = $page
 }
 
+$output = Paginate "GET" "/orgs/$orgId/packages" $Params
+foreach ($results in $output) {
+    $packages += $results.Content | ConvertFrom-Json
+}
+$packages | Group-Object display_name | Sort-Object name | Select-Object Count,name | Export-Csv -Path $packagesFile -NoTypeInformation
+
+################################################
+# Generate Software Inventory Output
+################################################
+$softwareInv = foreach ($package in ($packages | Where-Object {$_.installed -EQ $true})) {
+    $device = $servers | Where-Object { $_.id -eq $package.server_id }
+    $record = [PSCustomObject]@{
+        computer = $device.name
+        display_name = $package.display_name
+        version = $package.version
+    }
+    $record
+}
+$softwareInv | Sort-Object Display_Name | Export-Csv -Path $softwareInvFile -NoTypeInformation -Append -Force
+
+################################################
+# Generate Servers Output
+################################################
 Write-Host "Creating Servers json..."
-$data | Out-File "$expDir\Servers.json"
+$servers.results | ConvertTo-Json -Depth 10 -Compress | Out-File $serverFile
 
-##ServerGroups
-Start-Sleep -Seconds 5
-##Reset Variables
-$page = 0
-$data = @()
+################################################
+# Generate Server Groups JSON Output
+################################################
+$serverGroups = @()
 
-while($true) {
-    $url = "https://console.automox.com/api/servergroups?o=$orgID&limit=$limit&page=$page"
-    $resp = (Invoke-WebRequest -Method Get -Uri $url -Headers $headers).Content 
-    $data += $resp
+$Params = @{
+    o = $orgId
+    l = $limit
+    p = $page
+}
 
-    if($resp.results.count -lt $limit) {
-        break
-    }
-    $page += 1
+$output = Paginate "GET" "/servergroups" $Params
+foreach ($results in $output) {
+    $serverGroups += $results.Content
 }
 
 Write-Host "Creating Servergroups json..."
-$data | Out-File "$expDir\ServerGroups.json"
 
-##Prepatch Report
-Start-Sleep -Seconds 5
-##Reset Variables
-$page = 0
-$data = @()
+$serverGroups | Out-File $serverGroupsFile
 
-while($true) {
-    $url = "https://console.automox.com/api/reports/prepatch?o=$orgID&limit=$limit&page=$page"
-    $resp = (Invoke-WebRequest -Method Get -Uri $url -Headers $headers).Content
-    $data += $resp
+################################################
+# Generate Prepatch Report Output
+################################################
+$prePatchData = @()
 
-    if($resp.results.count -lt $limit) {
-        break
-    }
-    $page += 1
+if ( $limit -gt 250 ) {
+    $adjustedLimit = 250
+} else {
+    $adjustedLimit = $limit
+}
+
+$Params = @{
+    o = $orgId
+    l = $adjustedLimit
+    offset = 0
+}
+
+$output = Paginate "GET" "/reports/prepatch" $Params
+foreach ($results in $output) {
+    $prePatchData += $results.Content
 }
 
 Write-Host "Creating PrePatch json..."
-$data | Out-File "$expDir\PrePatch.json"
 
-##PolicyStats
-Start-Sleep -Seconds 5
-##Reset Variables
-$page = 0
-$data = @()
+$prePatchData | Out-File $prePatchFile
 
-while($true) {
-    $url = "https://console.automox.com/api/policystats?o=$orgID&limit=$limit&page=$page"
-    $resp = (Invoke-WebRequest -Method Get -Uri $url -Headers $headers).Content
-    $data += $resp
+################################################
+# Generate Policy Stats JSON Output
+################################################
+$policyStats = @()
 
-    if($resp.results.count -lt $limit) {
-        break
-    }
-    $page += 1
+$Params = @{
+    o = $orgId
+    l = $limit
+    p = $page
 }
 
-Write-Host "Creating PolicyStats json..."
-$data | Out-File "$expDir\PolicyStats.json"
-
-##PackagesWaiting
-Start-Sleep -Seconds 5
-##Reset Variables
-$page = 0
-$data = @()
-
-while($true) {
-    $url = "https://console.automox.com/api/orgs/$orgID/packages?o=$orgID&awaiting=1&limit=$limit&page=$page"
-    $resp = (Invoke-WebRequest -Method Get -Uri $url -Headers $headers).Content
-    $data += $resp
-
-    if($resp.results.count -lt $limit) {
-        break
-    }
-    $page += 1
+$output = Paginate "GET" "/policystats" $Params
+foreach ($results in $output) {
+    $policyStats += $results.Content
 }
 
+Write-Host "Creating Policy Stats json..."
+
+$policyStats | Out-File $policyStatsFile
+
+################################################
+# Generate Packages Awaiting Output
+################################################
 Write-Host "Creating PackagesWaiting json..."
-$data | Out-File "$expDir\PackagesWaiting.json"
+$packages | ConvertTo-Json -Depth 10 -Compress | Out-File $packagesWaitingFile
 
-##Policies
-Start-Sleep -Seconds 5
-##Reset Variables
-$page = 0
-$data = @()
+################################################
+# Generate Policies JSON Output
+################################################
+$policies = @()
 
-while($true) {
-    $url = "https://console.automox.com/api/policies?o=$orgID&limit=$limit&page=$page"
-    $resp = (Invoke-WebRequest -Method Get -Uri $url -Headers $headers).Content
-    $data += $resp
-
-    if($resp.results.count -lt $limit) {
-        break
-    }
-    $page += 1
+$Params = @{
+    o = $orgId
+    l = $limit
+    p = $page
 }
 
-Write-Host "Creating Policys json..."
-$data | Out-File "$expDir\Policies.json"
+$output = Paginate "GET" "/policies" $Params
+foreach ($results in $output) {
+    $policies += $results.Content
+}
+
+Write-Host "Creating Policies json..."
+
+$policies | Out-File $policiesFile
