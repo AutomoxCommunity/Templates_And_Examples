@@ -4,7 +4,7 @@
 $apiKey = '<YOUR_KEY_HERE>'
 $orgID = '<YOUR_ORG_HERE>'
 $page = 0
-$limit = 500
+$limit = 100
 $headers = @{"Authorization" = "Bearer $apiKey"}
 #############################################################################################################
 
