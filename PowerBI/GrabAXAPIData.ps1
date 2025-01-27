@@ -17,7 +17,7 @@ $servers = @()
 
 while($true) {
 
-    $uri = "https://console.automox.com/api/servers?o=$orgID&api_key=$apiKey&l=$limit&p=$page"
+    $uri = "https://console.automox.com/api/servers?o=$orgID&api_key=$apiKey&l=$limit&p=$page&include_details=1&include_server_events=1"
 
     $resp = (Invoke-WebRequest -Method GET -Uri $uri -UseBasicParsing).Content | ConvertFrom-Json | Select-Object results
 
