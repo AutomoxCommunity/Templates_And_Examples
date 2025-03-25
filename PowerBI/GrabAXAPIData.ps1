@@ -19,14 +19,14 @@ while($true) {
 
     $uri = "https://console.automox.com/api/servers?o=$orgID&api_key=$apiKey&l=$limit&p=$page&include_details=1&include_server_events=1"
 
-    $resp = (Invoke-WebRequest -Method GET -Uri $uri -UseBasicParsing).Content | ConvertFrom-Json | Select-Object results
+    $resp = (Invoke-WebRequest -Method GET -Uri $uri -Headers $headers -UseBasicParsing).Content | ConvertFrom-Json | Select-Object results
 
     $OutputVol = $resp.results `
         | Select-Object Name, agent_version, needs_reboot, last_disconnect_time, last_refresh_time, pending_patches, patches, `
             last_update_time, os_family, os_name, os_version, id, server_group_id, create_time -ExpandProperty detail `
         | Where-Object VOLUME -NE $null
 
-    $resp = (Invoke-WebRequest -Method GET -Uri $uri -UseBasicParsing).Content | ConvertFrom-Json | Select-Object results
+    $resp = (Invoke-WebRequest -Method GET -Uri $uri -Headers $headers -UseBasicParsing).Content | ConvertFrom-Json | Select-Object results
 
     $OutputNoVol = $resp.results `
         | Select-Object Name, agent_version, needs_reboot, last_disconnect_time, last_refresh_time, pending_patches, patches, `
@@ -93,7 +93,7 @@ $orgAndKey = "?o=$orgID&api_key=$apiKey"
 $getURI = $apiInstance + $apiTable + $orgAndKey
 
 # Get the json body of the Web Request
-$jsonReturn = (Invoke-WebRequest -UseBasicParsing -Method Get -Uri $getURI).Content
+$jsonReturn = (Invoke-WebRequest -UseBasicParsing -Method Get -Headers $headers -Uri $getURI).Content
 
 # Convert to object with manipulatable properties/values
 $servers = $jsonReturn | ConvertFrom-Json
